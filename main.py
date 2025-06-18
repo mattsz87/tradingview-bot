@@ -21,7 +21,8 @@ SL_PIPS_MAP = {
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    data = request.json
+    import json
+    data = json.loads(request.data)
     print(f"[{datetime.now()}] Odebrano sygnał: {data}")
 
     signal = data.get("signal", "BRAK").upper()
