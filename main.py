@@ -1,33 +1,59 @@
 from flask import Flask, request
 import requests
+from datetime import datetime
 
 app = Flask(__name__)
 
-# === KONFIGURACJA ===
 BOT_TOKEN = '7739855211:AAHXtqN3BO4GQPtFg9xprvSUNpPdMbtBPWI'
 CHAT_ID = '6622395147'
-RR_RATIO = 2.0      # Risk:Reward ratio (np. 2 = 1:2)
-SL_PIPS = 15        # Stały SL w pipsach (np. 15 = 1.5 USD)
 
-# === GŁÓWNY WEBHOOK ===
+# Konfiguracja RR i mapa SL per instrument
+RR_RATIO = 1.5  # Mniej TP-outów, wyższa skuteczność
+SL_PIPS_MAP = {
+    "EURUSD": 15,
+    "GBPUSD": 20,
+    "GBPJPY": 25,
+    "XAUUSD": 25,
+    "NAS100": 30,
+    "ETHUSD": 40,
+    "BTCUSD": 50
+}
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
-    signal = data.get("signal", "BRAK")
-    symbol = data.get("symbol", "???")
+    print(f"[{datetime.now()}] Odebrano sygnał: {data}")
+
+    signal = data.get("signal", "BRAK").upper()
+    symbol = data.get("symbol", "???").upper()
     price = float(data.get("price", 0))
 
-    # Wylicz SL i TP
+    # Dopasuj SL_PIPS na podstawie symbolu
+    SL_PIPS = SL_PIPS_MAP.get(symbol, 20)  # default 20
+
+    # pip_value zależnie od instrumentu
+    pip_value = 0.1  # domyślnie
+    if "USD" in symbol and "JPY" not in symbol and "XAU" not in symbol and "NAS" not in symbol:
+        pip_value = 0.0001
+    elif "JPY" in symbol:
+        pip_value = 0.01
+    elif "ETH" in symbol or "BTC" in symbol:
+        pip_value = 1
+    elif "NAS" in symbol or "US30" in symbol:
+        pip_value = 1.0
+    elif "XAU" in symbol:
+        pip_value = 0.1
+
+    # Oblicz SL i TP
     if signal == "BUY":
-        sl = round(price - (SL_PIPS / 10), 2)
-        tp = round(price + (SL_PIPS / 10) * RR_RATIO, 2)
+        sl = round(price - (SL_PIPS * pip_value), 5)
+        tp = round(price + (SL_PIPS * pip_value * RR_RATIO), 5)
     elif signal == "SELL":
-        sl = round(price + (SL_PIPS / 10), 2)
-        tp = round(price - (SL_PIPS / 10) * RR_RATIO, 2)
+        sl = round(price + (SL_PIPS * pip_value), 5)
+        tp = round(price - (SL_PIPS * pip_value * RR_RATIO), 5)
     else:
         sl = tp = "?"
 
-    # Wiadomość do Telegrama
     message = (
         f"🔔 SYGNAŁ: {signal} na {symbol} @ {price}\n"
         f"🛑 SL: {sl}\n"
@@ -39,10 +65,11 @@ def webhook():
 
     try:
         response = requests.post(url, data=payload)
-        return 'OK', 200
+        print(f"[{datetime.now()}] Telegram response: {response.status_code}")
     except Exception as e:
-        return f'Error: {e}', 500
+        print(f"[{datetime.now()}] Błąd przy wysyłaniu do Telegrama: {e}")
 
-# === URUCHOMIENIE ===
+    return 'OK', 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
