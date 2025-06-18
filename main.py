@@ -1,5 +1,6 @@
 from flask import Flask, request
 import requests
+import json
 from datetime import datetime
 
 app = Flask(__name__)
@@ -21,8 +22,16 @@ SL_PIPS_MAP = {
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    import json
-    data = json.loads(request.data)
+    if not request.data:
+        print(f"[{datetime.now()}] Brak danych w żądaniu")
+        return "Brak danych", 400
+
+    try:
+        data = json.loads(request.data.decode("utf-8"))
+    except Exception as e:
+        print(f"[{datetime.now()}] Błąd dekodowania JSON: {e}")
+        return "Błąd JSON", 400
+
     print(f"[{datetime.now()}] Odebrano sygnał: {data}")
 
     signal = data.get("signal", "BRAK").upper()
